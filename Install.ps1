@@ -32,5 +32,5 @@ $addition = @"
 "@
 $temporary = $patchPath + '.bridge-new'
 [IO.File]::WriteAllText($temporary, $original.TrimEnd() + "`r`n" + $addition + "`r`n", [Text.UTF8Encoding]::new($false))
-[IO.File]::Replace($temporary, $patchPath, $null)
+[IO.File]::Replace($temporary, $patchPath, $backup)
 Write-Host 'Installed. DSH live patch reload should load the bridge. Check client.mjs status; a config change alone is not proof of readiness.'
