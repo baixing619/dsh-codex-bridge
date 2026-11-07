@@ -1,0 +1,9 @@
+node_modules/
+*.log
+connection.json
+connection.json.*
+cordis.patch.before*.yml
+profiles/
+dist/
+.env*
+!*.example
