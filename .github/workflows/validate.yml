@@ -44,13 +44,13 @@ jobs:
           path: |
             dist/*.zip
             dist/SHA256SUMS.txt
-      - if: github.event_name == 'workflow_dispatch' && inputs.release
+      - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release view v0.1.0 2>$null
-          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; do not overwrite.' }
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Release exists; preserving its original assets.'; exit 0 }
           gh release create v0.1.0 dist/*.zip dist/SHA256SUMS.txt --target "${{ github.sha }}" --title "v0.1.0 — Skill and DSH plugin service" --notes "Contains the Codex skill, CLI, DSH plugin service, installer and source tests. Built and tested on GitHub-hosted runners; no personal DSH data is included."
           if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
