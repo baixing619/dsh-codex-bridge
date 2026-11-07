@@ -1,76 +1,44 @@
 # DSH ↔ Codex 本机协作桥
 
-把 Codex 的授权消息送进你**现有的 DSH 对话**，并增量读取该对话的公开回复。原 DSH 界面仍会显示消息，原会话上下文和工具权限继续有效。
+通过 CLI 向指定的既有 DSH 对话发送授权消息，并读取公开回复。消息保留在原界面，沿用原对话上下文和工具权限。
 
-本仓库同时包含 **Codex 技能、Node CLI、DSH 插件服务、Windows 安装器、隔离测试和云端打包工作流**。不是直接调用 DeepSeek API，也不会分发 DSH、模型或个人数据。
+支持 Windows 10/11 x64、PowerShell 5.1+、Node.js 24、DSHDesktop 0.5.16 / DSH 0.1.6-alpha.1。其他 DSH 版本需先核对 sessionController 接口；不包含 DSH、Node 或模型。
 
-## 组成
+## 安装
 
-```text
-Codex 技能 / CLI
-  → 受认证的动态 127.0.0.1 端口
-  → DSH 插件服务
-  → 安装时指定的既有会话
-```
+1. 从 [Releases](https://github.com/baixing619/dsh-codex-bridge/releases) 下载并解压 ZIP。
+2. 在 DSH 中选定已有会话，取得其 sessionId，在解压目录运行：
 
-- `bridge.mjs`：固定会话的认证 HTTP 服务。
-- `plugin.mjs`：在 DSH 的 Cordis 插件生命周期内启动、卸载服务并生成发现文件。
-- `client.mjs`：status / read / send。
-- `Install.ps1`：读取目标电脑自己的 DSH 配置，安装服务并保护本机凭据目录。
-- `skills/dsh-message-bridge/`：可单独安装、自带 CLI 的 Codex 技能。
-
-## 支持范围与前提
-
-Windows 10/11 x64、PowerShell 5.1+、Node.js 24，以及已安装的 DSHDesktop 0.5.16 / `@deepseek-ai/dsh` 0.1.6-alpha.1。插件依赖该版本注入的 `sessionController.inspect/prompt` 与 Cordis effect 生命周期；其他版本须先核对接口。Node 核心测试也可在 Linux 跑，不代表提供 Linux 安装器。
-
-## 安装服务
-
-1. 在 DSH 中创建或选定要协作的会话，记下它的真实 sessionId。
-2. 解压发布包，在该目录的 PowerShell 中运行：
-
-```powershell
+~~~powershell
 ./Install.ps1 -SessionId 'session-your-target-id'
-# 自定义 DSH 数据位置：
-./Install.ps1 -SessionId 'session-your-target-id' -DshHome 'D:/Apps/DSH/data'
 node ./client.mjs status
-```
+~~~
 
-安装器不复制凭据/会话/模型，不覆盖已有桥配置，不安装 DSH 或 Node。配置备份存放在受保护的 DSH 数据目录内 `profiles/local-message-bridge/backups/`，不写进源码目录。配置变更不等于服务已加载；以 status 和目标会话核对为准。
+自定义数据目录可传 -DshHome。安装器读取目标电脑自己的配置，拒绝重复安装；备份保存在 DSH 数据目录的 profiles/local-message-bridge/backups。检查 status 的 sessionId，确认桥绑定正确。
 
-## 安装 Codex 技能
-
-将 `skills/dsh-message-bridge` 整个目录复制到你的 Codex skills 目录（默认 `~/.codex/skills`）。技能自带 CLI，单独复制该子目录也可使用；服务仍需按上一步安装。
+将 skills/dsh-message-bridge 整个目录复制到 Codex 技能目录（默认 ~/.codex/skills）。技能自带 CLI，可单独复制；配套服务仍需先安装。
 
 ## 使用
 
-```powershell
+~~~powershell
 node ./client.mjs status
 node ./client.mjs read
 node ./client.mjs read 12
 node ./client.mjs send './message.txt' 'request-new-0001'
-```
+~~~
 
-消息文件为 UTF-8。每条新逻辑消息用新 ID；未知结果重试用原 ID 和相同内容。accepted 只表示已接收，继续增量读取回复、核对消息和新的 turn/start/turn/end 才能判定完成。并行操作者的回复没有逐条 requestId 绑定，不要猜归属。
+消息文件使用 UTF-8。新消息使用新 ID；结果不确定时先增量读取，重试保持原 ID 和相同正文。accepted 只代表接收，需核对后续可见回复和新的回合状态。
 
-## 权限与限制
+## 安全与回滚
 
-仅回环监听、精确 Host、拒绝 Origin、随机令牌、恒定时间鉴权；客户端不跟随重定向。只支持单个已绑定会话和 status/read/send。每分钟最多4条新消息，每条最多12000字符、JSON总量32KiB。历史最多返回最近40条 user/assistant 的 text，排除 reasoning 和工具内容。
+服务只监听受认证的动态回环端口，绑定单个会话。发送可能触发该会话已有工具；读取权限不包含发送权限。
 
-DSH_HOME 或 Windows 默认数据目录中 `profiles/local-message-bridge/connection.json` 含运行期地址与令牌。不要提交、打印或上传。相同 Windows 用户下的其他程序仍可读取本用户凭据；这不是对同用户恶意程序的隔离。
+发现文件 profiles/local-message-bridge/connection.json 含令牌，不要打印、提交或上传。客户端从 DSH_HOME 或当前 Windows 用户的默认 DSHDesktop 数据目录发现服务。同用户进程仍可读取本用户凭据。
 
-发送会继承目标会话已有工具权限，可能产生真实副作用；插件不负责撤销这些权限。此首版采用单实例源实现，没有把个人安装副本的未同步多实例扩展混入公开版本。
+回滚时只移除 profiles/web/cordis.patch.yml 中本次新增的 codex-local-message-bridge insert 块，勿用旧备份覆盖后续修改。热卸载会关闭端口并移除本实例的发现文件。
 
-## 回滚
+## 开发
 
-只移除 DSH web `cordis.patch.yml` 中本次新增的 `id: codex-local-message-bridge` insert 块。不要用备份覆盖后来修改。热卸载会关闭服务并移除本实例的发现文件；源码和配置备份保留。
+源码仓库保留测试和构建工具；发布 ZIP 只含技能、CLI、插件、安装器、说明及许可证。GitHub Actions 在 Windows/Linux 运行隔离测试，在 Windows 检查安装器、打包并核验 ZIP。测试使用合成宿主，不调用真实 DSH 或模型，也不证明真实 DSH 端到端投递。
 
-## 测试和发布
-
-```powershell
-npm test
-npm run test:install
-```
-
-测试均使用 runner 临时目录和合成宿主，不调用真实 DSH、模型或会话。GitHub Actions 在云端 Windows/Linux 运行核心测试，在 Windows 验证安装器，并打包包含服务及技能的 ZIP。云端测试不等于其他电脑上的真实 DSH 端到端验收。
-
-源码 MIT；不包含 DSH 二进制和依赖。DSH、DSH session 和 Cordis 属于各自上游项目并遵循其许可证。
+源码采用 [MIT 许可证](LICENSE)。

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Publish v0.1.0 after all checks pass
+        description: Publish the package version after all checks pass
         type: boolean
         default: false
 permissions:
@@ -37,20 +37,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm run package
+      - id: package
+        shell: pwsh
+        run: |
+          npm run package
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - shell: powershell
+        run: ./tests/package.test.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-codex-bridge-v0.1.0
+          name: dsh-codex-bridge-v${{ steps.package.outputs.version }}
           path: |
             dist/*.zip
             dist/SHA256SUMS.txt
-      - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release))
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
-          gh release view v0.1.0 2>$null
+          $tag = 'v' + $env:PACKAGE_VERSION
+          gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { Write-Output 'Release exists; preserving its original assets.'; exit 0 }
-          gh release create v0.1.0 dist/*.zip dist/SHA256SUMS.txt --target "${{ github.sha }}" --title "v0.1.0 — Skill and DSH plugin service" --notes "Contains the Codex skill, CLI, DSH plugin service, installer and source tests. Built and tested on GitHub-hosted runners; no personal DSH data is included."
+          gh release create $tag dist/*.zip dist/SHA256SUMS.txt --target "${{ github.sha }}" --title "$tag — Skill and DSH plugin service" --notes "Runtime package containing the Codex skill, CLI, DSH plugin service, Windows installer, README and MIT license. Tests and build tools remain in the repository. Built, tested and checked on GitHub-hosted runners with synthetic DSH fixtures."
           if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }

@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,6 +10,7 @@
   "scripts": {
     "test": "node --test --test-isolation=none bridge.test.mjs plugin.test.mjs client.test.mjs",
     "test:install": "pwsh -NoProfile -File tests/installer.test.ps1",
-    "package": "node tools/package.mjs"
+    "package": "node tools/package.mjs",
+    "test:package": "pwsh -NoProfile -File tests/package.test.ps1"
   }
 }
